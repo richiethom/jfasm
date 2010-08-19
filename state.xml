@@ -1,0 +1,79 @@
+<!--
+    associatedWith means that when a state is requested for an instance of MarketHashKey, we return an instance of MarketState
+    threadSafe means whether to generate code with a ReadWriteLock or not
+    -->
+<statediagram
+	name="MarketState"
+	package="marketpricing" 
+	associatedWith = "marketpricing.MarketHashKey"
+	startState="OPEN"
+	threadSafe="true">
+    <eventListeners>
+        <!-- this is something that can receive events -->
+        <eventListener name="marketPricingEngine"
+                       generatedInterface="marketpricing.MarketPricingEngine"/>
+	</eventListeners>
+	<!-- global properties for states -->
+	<properties>
+		<property name="marketName"
+			      type="java.lang.String"
+				  nullable="false"/>
+        <property name="price"
+                  type="marketpricing.Price"
+                  nullable="false"/>
+	</properties>
+	
+	<!-- all events get named in here, transitions are described later, unless it is a global transition -->			   
+	<events>
+	    <!-- whenever we receive this event, we need the price parameter -->
+		<event name="priceReceived">
+            <!-- a parameter described here is a parameter to be passed when the event happens -->
+			<parameter name="price"
+			           type="marketpricing.Price"/>
+		</event>
+		<!-- when this event happens, we transition to the AFTER_LAST_TRADE state,
+			 because we have given the name of a state to transition to, this event
+			 can be called from anywhere -->
+		<event name="lastTradeTimePassed"
+		       transitionTo="AFTER_LAST_TRADE"/>
+        <event name="expiryTimePassed"/>
+        <event name="feedFailure"/>
+	</events>
+	
+	<!-- timed events -->
+	<timedEvents>
+		<when after="lastTradeTime" callEvent="lastTradeTimePassed"/>
+		<when after="expiryTime" transitionTo="expiryTimePassed"/>
+	</timedEvents>
+	
+    <states>
+        <!-- a state -->
+        <state name="OPEN">
+            <!-- when this event happens, we transition to closed for feed failure -->
+            <onEvent name="feedFailure"
+                     transitionTo="CLOSED_FOR_FEED_FAILURE"/>
+            <!-- when we're in the OPEN state, priceReceived doesn't change state -->
+            <onEvent name="priceReceived"
+                     event="marketPricingEngine.sendPrice"
+                     parameter="key"
+                     timeStamp="priceLastReceived"/>
+        </state>
+        
+        <!-- another state -->
+        <state name="CLOSED_FOR_FEED_FAILURE">
+            <!-- when we enter the feed failure event, we call the feed failure method, with this state instance as a parameter -->
+            <onEnter event="marketPricingEngine.feedFailure"
+                     parameter="state"/>
+            <onEvent name="priceReceived"
+                     transitionTo="OPEN"/>
+        </state>
+        
+        <state name="AFTER_LAST_TRADE">
+            <onEvent name="expiryTimePassed"
+                     private="true"
+                     transitionTo="EXPIRED"/>
+        </state>
+        
+        <state name="EXPIRED"/>
+    </states>
+</statediagram>
